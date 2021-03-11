@@ -166,6 +166,39 @@ waitingTime:
         mov.b   &P1IN,R4
         ret
         
+multiply:
+        MOV.W   #0,R7                   ;Result is stored in R7
+        CMP.W   R5,R6                   ;Check to see which number is bigger
+        JN      firstBigger             ;If R5 is bigger, add it R6 times
+        JMP     secondBigger            ;Otherwise, add R6 R5 times
+        
+firstBigger:
+        CMP.W   #0,R6                   ;Check to see if you've added the necessary amount of times
+        JEQ     return                  ;Return if you have
+        ADD     R5,R7                   ;If not, add R5 again
+        DEC     R6                      ;Decrease counter (R6)
+        JMP     firstBigger             ;Loop again
+        
+secondBigger:   
+        CMP.W   #0,R5                   ;Check to see if you've added the necessary amount of times
+        JEQ     return                  ;Return if you have
+        ADD     R6,R7                   ;If not, add R6 again
+        DEC     R5                      ;Decrease counter (R5)
+        JMP     secondBigger            ;Loop again    
+         
+divide:         
+        MOV.W   #0,R7                   ;Result
+
+divideLoop:
+        SUB.W   R6,R5                   ;Subtract denominator from numerator
+        JN      return                  ;If it's negative, end the division operation
+        ;JZ      return
+        INC     R7                      ;Increase result
+        JMP     divideLoop              ;Loop again
+
+return:
+        RET
+        
         JMP $                           ; jump to current location '$'
         NOP                             ; (endless loop)
         END
