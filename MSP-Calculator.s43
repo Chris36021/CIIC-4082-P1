@@ -98,8 +98,8 @@ reset:
         jz      tNumSel
         incd.w  R14
         mov.w   @R14,R8
-        add     R5,R10                  ; Add current number to result
-        mov.w   R10,R9                  ; Update value to be multiplied * 10
+        add     R5,R11                  ; Add current number to result
+        mov.w   R11,R9                  ; Update value to be multiplied * 10
         call    #timesTen               ; Multiply result by 10 (add 0 to the right)
         mov.b   #0,R5  
   
@@ -109,7 +109,7 @@ reset:
         
 
 timesTen:
-        Add     R9,R10                   ; Add temp value to R6 repeated 10 times
+        Add     R9,R11                   ; Add temp value to R6 repeated 10 times
         INC     R12                      
         CMP     #10,R12                  ; If R4 reaches 10, stop loop
         JNE     timesTen
@@ -131,7 +131,7 @@ tNumSel:
         mov.b   #0, &0xA29
         mov.b   #0, &0xA25
         mov.b   #0, &0xA23
-        add     R5,R10                  ; Add current number to result
+        add     R5,R11                  ; Add current number to result
         mov.w   #0,R9                   ; Update value to be multiplied * 10
         mov.b   #0,R5 
         ;mov.w   #operHB,R14
@@ -164,6 +164,8 @@ resetOp:
         mov.w   @R14,R8
         mov.b   #0, &0xA29
         mov.b   #0,&0xA2A
+        mov.w   R11,R10                ; Shift first value into R10
+        mov.w   #0,R11                 ; Set space for second to 0
         jmp     Mainloop
         
 nextOp:
@@ -226,4 +228,3 @@ return:
         JMP $                           ; jump to current location '$'
         NOP                             ; (endless loop)
         END
-
