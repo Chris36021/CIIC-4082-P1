@@ -217,7 +217,7 @@ addition:
 subtract:
         SUB     R11,R10
         MOV.W   R10,R7
-        JMP     return
+        JMP     displayResult
         
 multiply:
         MOV.W   #0,R7                   ;Result is stored in R7
@@ -244,12 +244,21 @@ divide:
         MOV.W   #0,R8                   ;Remainder
 
 divideLoop:
-        MOV.W   R5,R8
-        SUB.W   R6,R5                   ;Subtract denominator from numerator
+        MOV.W   R10,R8
+        SUB.W   R11,R10                   ;Subtract denominator from numerator
         JN      return                  ;If it's negative, end the division operation
         ;JZ      return
         INC     R7                      ;Increase result
         JMP     divideLoop              ;Loop again
+
+displayResult:
+        CMP     #0,R7
+        JL      displayNegative
+        JMP     return
+      
+displayNegative:
+        MOV.B   #0x04,&0xA2A            ; Negative sign
+        JMP     return 
 
 return:
         RET
@@ -257,4 +266,3 @@ return:
         JMP $                           ; jump to current location '$'
         NOP                             ; (endless loop)
         END
-
