@@ -12,9 +12,9 @@
 digit   db      0xFC,0x60,0xDB,0xF3,0x67,0xB7,0xBF,0xE0,0xFF,0xF7
 disp    dW      0xA29,0xA25,0xA23,0xA29,0xA25,0xA23
 
-;operators        +     -    x     /
-operHB  db      0x03, 0x03, 0x00, 0x00
-operLB  db      0x50, 0x00, 0xAA, 0x50
+;operators        +     -    *     /
+operHB  db      0x03, 0x03, 0x03, 0x00
+operLB  db      0x50, 0x00, 0xFA, 0x50
       
 
         RSEG    CSTACK                  ; pre-declaration of segment
@@ -241,9 +241,11 @@ secondBigger:
          
 divide:         
         MOV.W   #0,R7                   ;Result
+        MOV.W   #0,R8                   ;Remainder
 
 divideLoop:
-        SUB.W   R11,R10                 ;Subtract denominator from numerator
+        MOV.W   R5,R8
+        SUB.W   R6,R5                   ;Subtract denominator from numerator
         JN      return                  ;If it's negative, end the division operation
         ;JZ      return
         INC     R7                      ;Increase result
