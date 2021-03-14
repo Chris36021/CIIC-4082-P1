@@ -239,14 +239,27 @@ secondBigger:
         ADD     R11,R7                   ;If not, add R6 again
         DEC     R10                      ;Decrease counter (R5)
         JMP     secondBigger            ;Loop again    
+
+error:
+       MOV.B    #0x9F, &0xA29
+       MOV.B    #0xCF, &0xA25
+       MOV.B    #0xCF, &0xA23
+       MOV.B    #0xCF, &0xA2E
+       MOV.B    #0x02, &0xA26
+       MOV.B    #0x02, &0xA24
+       MOV.B    #0x02, &0xA2F
+       MOV.B    #0xFC, &0xA32
+       JMP      overSubroutine
          
-divide:         
+divide:
+        CMP.W   #0,R11
+        JEQ     error
         MOV.W   #0,R7                   ;Result
         MOV.W   #0,R8                   ;Remainder
 
 divideLoop:
         MOV.W   R10,R8
-        SUB.W   R11,R10                   ;Subtract denominator from numerator
+        SUB.W   R11,R10                 ;Subtract denominator from numerator
         JN      return                  ;If it's negative, end the division operation
         ;JZ      return
         INC     R7                      ;Increase result
@@ -293,7 +306,8 @@ mostrarD:
 
 return:
         RET
-        
+       
+overSubroutine:
         JMP $                           ; jump to current location '$'
         NOP                             ; (endless loop)
         END
