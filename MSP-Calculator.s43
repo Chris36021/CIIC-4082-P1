@@ -10,6 +10,8 @@
 
 ;Digits           0    1    2   3    4    5    6    7    8    9
 digit   db      0xFC,0x60,0xDB,0xF3,0x67,0xB7,0xBF,0xE0,0xFF,0xF7
+;digitHB   db      0xFC,0x60,0xDB,0xF3,0x67,0xB7,0xBF,0xE0,0xFF,0xF7
+;digitLB   db      0x28,0x20,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
 disp    dW      0xA29,0xA25,0xA23,0xA29,0xA25,0xA23
 Final   dw      0xA29,0xA25,0xA23,0xA32,0xA2E,0xA27
 
@@ -82,9 +84,8 @@ Mainloop:
     
         mov.b   &P1IN,R4
         
-        
         ;Press left button
-         and.b   #00000110B,R4
+        and.b   #00000110B,R4
         cmp.b   #00000100B,R4
         jeq     nextNumber
         
@@ -129,7 +130,6 @@ returnZero:
         jmp     Mainloop
         
 tNumSel:
-        
         mov.b   #0, &0xA29
         mov.b   #0, &0xA25
         mov.b   #0, &0xA23
@@ -249,7 +249,7 @@ error:
        MOV.B    #0x02, &0xA24
        MOV.B    #0x02, &0xA2F
        MOV.B    #0xFC, &0xA32
-       JMP      overSubroutine
+       JMP      pressToRepeatLoop
          
 divide:
         CMP.W   #0,R11
@@ -298,14 +298,48 @@ mostrarD:
         mov.w   @R4,R13
         Pop.w   R5     
         cmp.b   #0x00CD,R5
-        JEQ     return
-        JZ      return
+        JEQ     pressToRepeatLoop
+        ;JZ      return
         mov.b   digit(R5),0(R13)
         incd.w  R4
         jmp     mostrarD        
 
 return:
         RET
+        
+;Repeats until the user presses any of the two buttons used throughout the progam again.
+;When the user does so, it jumps to the next Subroutine that clears the display and 
+;restarts the program.
+pressToRepeatLoop:
+        call    #waitingTime
+    
+        mov.b   &P1IN,R4
+        
+        ;Press left button
+        and.b   #00000110B,R4
+        cmp.b   #00000100B,R4
+        jeq     init
+        
+        ;Press right button
+        cmp.b   #00000010B,R4
+        jeq     init
+        JMP     pressToRepeatLoop
+        
+;Clears numbers in the display and goes back to the beginning of the program
+pressToRepeat:
+       MOV.B    #0, &0xA29
+       MOV.B    #0, &0xA25
+       MOV.B    #0, &0xA23
+       MOV.B    #0, &0xA2E
+       MOV.B    #0, &0xA26
+       MOV.B    #0, &0xA24
+       MOV.B    #0, &0xA2F
+       MOV.B    #0, &0xA32
+       MOV.B    #0, &0xA2A
+       MOV.B    #0, &0xA33
+       MOV.B    #0, &0xA27
+       MOV.B    #0, &0xA28
+       JMP      init
        
 overSubroutine:
         JMP $                           ; jump to current location '$'
