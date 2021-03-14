@@ -260,7 +260,7 @@ divide:
 divideLoop:
         MOV.W   R10,R8
         SUB.W   R11,R10                 ;Subtract denominator from numerator
-        JN      return                  ;If it's negative, end the division operation
+        JN      pushAndCallDisplay                  ;If it's negative, end the division operation
         ;JZ      return
         INC     R7                      ;Increase result
         JMP     divideLoop              ;Loop again
