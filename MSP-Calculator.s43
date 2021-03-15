@@ -216,8 +216,19 @@ addition:
         JMP     pushAndCallDisplay
         
 subtract:
+        CMP     R11,R10
+        JL      negativeNum
+        JGE     positiveNum
+        
+positiveNum:
         SUB     R11,R10
         MOV.W   R10,R7
+        JMP     pushAndCallDisplay
+
+negativeNum:
+        MOV.B   #0x04,&0xA2A            ; Negative sign
+        SUB     R10,R11
+        MOV.W   R11,R7
         JMP     pushAndCallDisplay
         
 multiply:
