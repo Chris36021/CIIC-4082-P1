@@ -226,9 +226,30 @@ addition:
         JMP     pushAndCallDisplay
         
 subtract:
+        CMP     R11,R10
+        JL      negativeNum
+        JGE     positiveNum
+
+positiveNum:
         SUB     R11,R10
         MOV.W   R10,R7
         JMP     pushAndCallDisplay
+
+negativeNum:
+        MOV.B   #0x04,R6                ;Use as flag, if on, there's a negative num
+        SUB     R10,R11
+        MOV.W   R11,R7
+        JMP     pushAndCallDisplay
+        
+        
+checkNegativeFlag:
+        CMP     #0x04,R6
+        JEQ     turnOnNegative
+        JN      pressToRepeatLoop
+ 
+turnOnNegative:
+        MOV.B   #0x04,&0xA2A            ; Negative sign
+        JMP     pressToRepeatLoop 
         
 multSetUp:
         MOV.W   #0,R7          
@@ -360,12 +381,12 @@ mostrarD:
         mov.w   @R4,R13
         Pop.w   R5     
         cmp.b   #0x00CD,R5
-        JEQ     pressToRepeatLoop
+        JEQ     checkNegativeFlag
         ;JZ      return
-        mov.b  digitH(R5),0(R13)
-        mov.b  digitL(R5),1(R13)
+        mov.b   digitH(R5),0(R13)
+        mov.b   digitL(R5),1(R13)
         incd.w  R4
-        jmp     mostrarD        
+        jmp     mostrarD    
 
 return:
         RET
