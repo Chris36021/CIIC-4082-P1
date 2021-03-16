@@ -111,8 +111,7 @@ updateNumber:
         add     R5,R11                  ; Add current number to result
         mov.w   R11,R9                  ; Update value to be multiplied * 10
         call    #timesTen               ; Multiply result by 10 (add 0 to the right)
-        ret
-        
+        ret    
 
 timesTen:
         Add     R9,R11                   ; Add temp value to R6 repeated 10 times
@@ -287,6 +286,7 @@ multSecondLeft:
         JMP     multSecondBigger  
 
 error:
+       MOV.W   #2,&LCDCMEMCTL
        MOV.B    #0x9F, &0xA29
        MOV.B    #0xCF, &0xA25
        MOV.B    #0xCF, &0xA23
@@ -343,7 +343,7 @@ pushCeroOnce:
 
 pushAndCallDisplay:
         MOV.W   #2,&LCDCMEMCTL
-        PUSH.W   #0x00CD        
+        PUSH.W  #0x00CD        
         JMP displayResult
         
 checkIfNegative:
@@ -395,6 +395,7 @@ return:
 ;When the user does so, it jumps to the next Subroutine that clears the display and 
 ;restarts the program.
 pressToRepeatLoop:
+        MOV.W    #0x0FFFF,R6
         call    #waitingTime
     
         mov.b   &P1IN,R4
@@ -411,8 +412,8 @@ pressToRepeatLoop:
         
 ;Clears numbers in the display and goes back to the beginning of the program
 pressToRepeat:
-              MOV.W   #2,&LCDCMEMCTL
-              JMP        init
+              MOV.W     #2,&LCDCMEMCTL
+              JMP       init
        
 overSubroutine:
         JMP $                           ; jump to current location '$'
