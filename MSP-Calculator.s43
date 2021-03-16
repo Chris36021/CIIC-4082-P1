@@ -9,15 +9,15 @@
         ORG     0x01C00                ; Start of RAM        ORG     1C00
 
 ;Digits           0    1    2   3    4    5    6    7    8    9
-digit   db      0xFC,0x60,0xDB,0xF3,0x67,0xB7,0xBF,0xE0,0xFF,0xF7
-;digitHB   db      0xFC,0x60,0xDB,0xF3,0x67,0xB7,0xBF,0xE0,0xFF,0xF7
-;digitLB   db      0x28,0x20,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+
+digitH  db      0xFC,0x60,0xDB,0xF3,0x67,0xB7,0xBF,0xE0,0xFF,0xF7
+digitL  db      0x28,0x20,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
 disp    dW      0xA29,0xA25,0xA23,0xA29,0xA25,0xA23
 Final   dw      0xA29,0xA25,0xA23,0xA32,0xA2E,0xA27
 
 ;operators        +     -    *     /
 operHB  db      0x03, 0x03, 0x03, 0x00
-operLB  db      0x50, 0x00, 0xFA, 0x50
+operLB  db      0x50, 0x00, 0xFA, 0x28
       
 
         RSEG    CSTACK                  ; pre-declaration of segment
@@ -77,8 +77,9 @@ UnlockGPIO:                             ; Disable de GPIO power-on default
         mov.W #0xFFFF,R7
         
 Mainloop:
-        
-        mov.b   digit(R5),0(R8)
+         
+        mov.b  digitH(R5),0(R8)
+        mov.b  digitL(R5),1(R8)
         
         call    #waitingTime
     
@@ -101,14 +102,16 @@ reset:
         jz      tNumSel
         incd.w  R14
         mov.w   @R14,R8
-        add     R5,R11                  ; Add current number to result
-        mov.w   R11,R9                  ; Update value to be multiplied * 10
-        call    #timesTen               ; Multiply result by 10 (add 0 to the right)
+        call    #updateNumber
         mov.b   #0,R5  
-  
         
         jmp     Mainloop
 
+updateNumber:
+        add     R5,R11                  ; Add current number to result
+        mov.w   R11,R9                  ; Update value to be multiplied * 10
+        call    #timesTen               ; Multiply result by 10 (add 0 to the right)
+        ret
         
 
 timesTen:
@@ -144,8 +147,10 @@ tNumSel:
         ;mov.w   @R14,R9
         
 MainOp:
+        MOV.W   #2,&LCDCMEMCTL
         mov.b   operHB(R5),&0xA29
         mov.b   operLB(R5),&0xA2A
+        
         
         call    #waitingTime
     
@@ -175,7 +180,10 @@ resetOp:
         jmp     Mainloop
         
 nextOp:
+       
         inc     R5
+        mov.b   operHB(R5),&0xA29
+        mov.b   operLB(R5),&0xA2A
         cmp     #4,R5
         jz      returnOp
         jmp     MainOp
@@ -183,6 +191,8 @@ nextOp:
 returnOp:
         mov.b   #0,R5
         jmp     MainOp
+        mov.b   operHB(R5),&0xA29
+        mov.b   operLB(R5),&0xA2A
         
 waitingOp:
         dec.w    R7
@@ -205,7 +215,7 @@ switchStatement:
         CMP     #1,R15
         JEQ     subtract
         CMP     #2,R15
-        JEQ     multiply
+        JEQ     multSetUp
         CMP     #3,R15
         JEQ     divide        
         
@@ -216,40 +226,44 @@ addition:
         JMP     pushAndCallDisplay
         
 subtract:
-        CMP     R11,R10
-        JL      negativeNum
-        JGE     positiveNum
-        
-positiveNum:
         SUB     R11,R10
         MOV.W   R10,R7
         JMP     pushAndCallDisplay
-
-negativeNum:
-        MOV.B   #0x04,&0xA2A            ; Negative sign
-        SUB     R10,R11
-        MOV.W   R11,R7
-        JMP     pushAndCallDisplay
         
-multiply:
-        MOV.W   #0,R7                   ;Result is stored in R7
-        CMP.W   R10,R11                   ;Check to see which number is bigger
-        JN      firstBigger             ;If R5 is bigger, add it R6 times
-        JMP     secondBigger            ;Otherwise, add R6 R5 times
+multSetUp:
+        MOV.W   #0,R7          
+        MOV.W   #0,R8       
+        CMP.W   R10,R11                 ;Check to see which number is bigger
+        JN      multFirstBigger         ;If R5 is bigger, add it R6 times
+        JMP     multSecondBigger         ;Otherwise, add R6 R5 times
+   
+multFirstBigger:
+        CMP     #0,R10                 ;Check to see if you've added the necessary amount of times
+        JEQ     displayBothRegs                     
+        DEC     R10                             
+        ADD     R11,R8                 ;If not Add R8 again
+        CMP     #1000,R8
+        JGE     multFirstLeft
+        JL      multFirstBigger
         
-firstBigger:
-        CMP.W   #0,R11                   ;Check to see if you've added the necessary amount of times
-        JEQ     pushAndCallDisplay                  ;Return if you have
-        ADD     R10,R7                   ;If not, add R5 again
-        DEC     R11                      ;Decrease counter (R6)
-        JMP     firstBigger             ;Loop again
+multFirstLeft:
+        INC     R7
+        SUB     #1000,R8     
+        JMP     multFirstBigger
+               
+multSecondBigger:
+        CMP     #0,R11
+        JEQ     displayBothRegs      
+        DEC     R11
+        ADD     R10,R8
+        CMP     #1000,R8
+        JGE     multSecondLeft
+        JL      multSecondBigger
         
-secondBigger:   
-        CMP.W   #0,R10                   ;Check to see if you've added the necessary amount of times
-        JEQ     pushAndCallDisplay                  ;Return if you have
-        ADD     R11,R7                   ;If not, add R6 again
-        DEC     R10                      ;Decrease counter (R5)
-        JMP     secondBigger            ;Loop again    
+multSecondLeft:
+        INC     R7
+        SUB     #1000,R8     
+        JMP     multSecondBigger  
 
 error:
        MOV.B    #0x9F, &0xA29
@@ -276,7 +290,38 @@ divideLoop:
         INC     R7                      ;Increase result
         JMP     divideLoop              ;Loop again
 
+displayBothRegs:  
+        CMP     #0,R7
+        JEQ     loadOne            
+        JNE     loadBoth
+
+loadOne:
+        MOV     R8,R7
+        JMP     pushAndCallDisplay
+        
+loadBoth:
+        MOV.W   #1,R6                   ;Flag turns on if there's a second register to load
+        MOV.W   R7,R14
+        MOV.W   R8,R7
+        JMP     pushAndCallDisplay
+
+pushSecond:
+        MOV.W   R14,R7
+        MOV.w   #0,R6                   ;Turn off flag
+        CMP     #100,R8
+        JGE     displayResult
+        CMP     #10,R8
+        JGE     pushCeroOnce              
+        push.w  #0
+        push.w  #0
+        JMP     displayResult
+        
+pushCeroOnce:
+        push.w  #0
+        JMP     displayResult
+
 pushAndCallDisplay:
+        MOV.W   #2,&LCDCMEMCTL
         PUSH.W   #0x00CD        
         JMP displayResult
         
@@ -293,7 +338,7 @@ displayDivide:
         MOV.W   R7,R13
         SUB.W   #10,R7                    ;Subtract denominator from numerator
         JN      nextRemainder             ;If it's negative, end the division operation
-        INC     R12                        ;Increase result
+        INC     R12                       ;Increase result
         JMP     displayDivide             ;Loop again
 
 nextRemainder:
@@ -303,7 +348,13 @@ nextRemainder:
         jnz     displayResult
         mov.b   #0,R4
         mov.w   #Final,R4
-        jz      mostrarD
+        jz      checkFlag
+        
+        
+checkFlag:
+        CMP     #1,R6
+        JEQ     pushSecond
+        JNE     mostrarD
    
 mostrarD:
         mov.w   @R4,R13
@@ -311,7 +362,8 @@ mostrarD:
         cmp.b   #0x00CD,R5
         JEQ     pressToRepeatLoop
         ;JZ      return
-        mov.b   digit(R5),0(R13)
+        mov.b  digitH(R5),0(R13)
+        mov.b  digitL(R5),1(R13)
         incd.w  R4
         jmp     mostrarD        
 
@@ -338,19 +390,8 @@ pressToRepeatLoop:
         
 ;Clears numbers in the display and goes back to the beginning of the program
 pressToRepeat:
-       MOV.B    #0, &0xA29
-       MOV.B    #0, &0xA25
-       MOV.B    #0, &0xA23
-       MOV.B    #0, &0xA2E
-       MOV.B    #0, &0xA26
-       MOV.B    #0, &0xA24
-       MOV.B    #0, &0xA2F
-       MOV.B    #0, &0xA32
-       MOV.B    #0, &0xA2A
-       MOV.B    #0, &0xA33
-       MOV.B    #0, &0xA27
-       MOV.B    #0, &0xA28
-       JMP      init
+              MOV.W   #2,&LCDCMEMCTL
+              JMP        init
        
 overSubroutine:
         JMP $                           ; jump to current location '$'
