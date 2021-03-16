@@ -2,16 +2,17 @@
 
         NAME    main                    ; module name
 
-        PUBLIC  main                    ; make the main label vissible
+        PUBLIC  main                    ; make the main label visible
                                         ; outside this module
         ORG     0FFFEh
         DC16    init                    ; set reset vector to 'init' label
-        ORG     0x01C00                ; Start of RAM        ORG     1C00
+        ORG     0x01C00                 ; Start of RAM        ORG     1C00
 
 ;Digits           0    1    2   3    4    5    6    7    8    9
-
 digitH  db      0xFC,0x60,0xDB,0xF3,0x67,0xB7,0xBF,0xE0,0xFF,0xF7
 digitL  db      0x28,0x20,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+
+;Displays
 disp    dW      0xA29,0xA25,0xA23,0xA29,0xA25,0xA23
 Final   dw      0xA29,0xA25,0xA23,0xA32,0xA2E,0xA27
 
@@ -20,29 +21,29 @@ operHB  db      0x03, 0x03, 0x03, 0x00
 operLB  db      0x50, 0x00, 0xFA, 0x28
       
 
-        RSEG    CSTACK                  ; pre-declaration of segment
-        RSEG    CODE                    ; place program in 'CODE' segment
+        RSEG    CSTACK                    ; pre-declaration of segment
+        RSEG    CODE                      ; place program in 'CODE' segment
 
 
+; This is an extension of the previous subroutine 
+init:   MOV     #SFE(CSTACK), SP          ; set up stack
 
-init:   MOV     #SFE(CSTACK), SP        ; set up stack
+main:   NOP                               ; main program
+        MOV.W   #WDTPW+WDTHOLD,&WDTCTL    ; Stop watchdog timer
 
-main:   NOP                             ; main program
-        MOV.W   #WDTPW+WDTHOLD,&WDTCTL  ; Stop watchdog timer
-
-        mov.w   #0xFFFF,&LCDCPCTL0      ;Enable LCD segments 0-21; 26-43
+        mov.w   #0xFFFF,&LCDCPCTL0        ;Enable LCD segments 0-21; 26-43
         mov.w   #0xFC3F,&LCDCPCTL1
         mov.w   #0x0FFF,&LCDCPCTL2
         
-        mov.w   #0,R9                   ; Temp input number                  
-        mov.w   #0,R10                  ; First input number
-        mov.w   #0,R11                  ; Second input number
-        mov.w   #1,R12                  ; Mult. Counter (start at 1)
-        mov.w   #0,R13                  ; Flag -> change if a number has been added
+        mov.w   #0,R9                    ; Temp input number                  
+        mov.w   #0,R10                   ; First input number
+        mov.w   #0,R11                   ; Second input number
+        mov.w   #1,R12                   ; Mult. Counter (start at 1)
+        mov.w   #0,R13                   ; Flag -> change if a number has been added
 
 SetupP1:
-        bic.b   #0xFF,&P1SEL0           ; Set PxSel0 and PxSel1 to digital I/O
-        bic.b   #0xFF,&P1SEL1           ; Digital I/O is the default
+        bic.b   #0xFF,&P1SEL0            ; Set PxSel0 and PxSel1 to digital I/O
+        bic.b   #0xFF,&P1SEL1            ; Digital I/O is the default
         bic.b   #0xFF,&P9SEL0
         bic.b   #0xFF,&P9SEL1
         
@@ -57,8 +58,6 @@ SetupP1:
         bis.b   #00000110B,&P1OUT       ; Set resistors for P1.1 and P1.2 as
                                         ; as pull-down
 
-        
-        
 UnlockGPIO:                             ; Disable de GPIO power-on default
         bic.w   #LOCKLPM5,&PM5CTL0      ; high-impedance mode to activade
                                         ; previously configured port settings
@@ -76,14 +75,19 @@ UnlockGPIO:                             ; Disable de GPIO power-on default
         mov.w #0,R7
         mov.W #0xFFFF,R7
         
+;Objetivo: Seleccionar los dígitos utilizando los botones y el dislay
+;Precondiciones: Los botones están programados para hacer input y displays programado output. 
+;Postcondiciones: Seleccion de los numeros deseados por el usuario
+;Autor: Hermes Colon
+;Fecha: 02/28/2021          
 Mainloop:
          
-        mov.b  digitH(R5),0(R8)
+        mov.b  digitH(R5),0(R8)         ;Numeros se presentan en el dislay
         mov.b  digitL(R5),1(R8)
         
-        call    #waitingTime
+        call    #waitingTime            ; Mejora funcionalidad del boton            
     
-        mov.b   &P1IN,R4
+        mov.b   &P1IN,R4                ;Verifica si los botones están presionados
         
         ;Press left button
         and.b   #00000110B,R4
@@ -93,10 +97,16 @@ Mainloop:
         ;Press right button
         cmp.b   #00000010B,R4
         jeq     reset
-        
-        
+       
         jmp     Mainloop 
-        
+     
+;Objetivo:Reiniciar el índice que se utiliza para asociar los dígitos en el display con su valor numérico mientras 
+;no se hayan seleccionado las tres cifras del operando
+;Precondiciones: R8 contiene el address del display al que se está apuntando actualmente, R5 representa
+;el índice de las listas, R14 apunta a los elementos de la lista disp
+;Postcondiciones: R5 contendrá un número dentro del rango inclusivo de 0 al 9
+;Autor: Hermes Colon, Christopher Castillo
+;Fecha: 02/27/2021    
 reset:
         cmp     #0xA23,R8
         jz      tNumSel
@@ -107,12 +117,22 @@ reset:
         
         jmp     Mainloop
 
+;Objetivo: Actualizar el número escogido por el usuario
+;Precondiciones: R5 representa el número escogido, R11 es el resultado
+;Postcondiciones: R9 mantendrá el valor de R11 temporalmente, se llamará subrutina para añadir 0 a la derecha
+;Autor: María Cordero
+;Fecha: 03/12/2021
 updateNumber:
         add     R5,R11                  ; Add current number to result
         mov.w   R11,R9                  ; Update value to be multiplied * 10
         call    #timesTen               ; Multiply result by 10 (add 0 to the right)
         ret    
 
+;Objetivo: Multiplicar el valor en R9 al resultado 10 veces, añadir un cero a la derecha para crear número escogido por usuario
+;Precondiciones: R9 contiene el número a ser multiplicado, R11 contiene el resultado, R12 actúa como counter de 1-10
+;Postcondiciones: R11 tendrá el resultado con cero a la derecha
+;Autor: María Cordero
+;Fecha: 03/12/2021
 timesTen:
         Add     R9,R11                   ; Add temp value to R6 repeated 10 times
         INC     R12                      
@@ -121,16 +141,32 @@ timesTen:
         MOV     #1,R12
         RET
 
+;Objetivo: Incrementa de cero hasta nueve para determinar el dígito seleccionado por el usuario
+;Precondiciones: Se tiene dos listas con los leds que forman los número y R5 es su index
+;Postcondiciones: R5 tendrá el dígito seleccionado por el usuario
+;Autor: Hermes Colon
+;Fecha: 02/28/2021  
 nextNumber:
         inc     R5
-        cmp     #10,R5
+        cmp     #10,R5                 
         jz      returnZero
         jmp     Mainloop
         
+;Objetivo: Al R5 llegar al número nueve vuelve al cero para R5 comportarte de manera cíclica.
+;Precondiciones: R5 llega al valor de diez
+;Postcondiciones: R5 se reseteara a cero nuevamente.
+;Autor: Hermes Colon
+;Fecha: 02/28/2021      
 returnZero:
         mov.b   #0,R5
         jmp     Mainloop
         
+;Objetivo: Guardar los valores numéricos que fueron seleccionados usando los botones y el display
+;Precondiciones: Las tres cifras del operando actual han sido seleccionadas 
+;Postcondiciones: Los valores numéricos a utilizar se quedan guardados en los registros para que no 
+;se pierdan.
+;Autor: Christopher Castillo
+;Fecha: 03/08/2021
 tNumSel:
         mov.b   #0, &0xA29
         mov.b   #0, &0xA25
@@ -140,11 +176,12 @@ tNumSel:
         mov.b   #0,R5 
         CMP     #0,R13
         JNZ     switchStatement
-        ;mov.w   #operHB,R14
-        ;mov.w   @R14,R8
-        ;mov.w   #operLB,R14
-        ;mov.w   @R14,R9
-        
+     
+;Objetivo: Seleccionar el operador a utilizar utilizando los botones y el dislay
+;Precondiciones: R5 tiene un valor de 0
+;Postcondiciones: 
+;Autor: Christopher Castillo
+;Fecha: 03/10/2021    
 MainOp:
         MOV.W   #2,&LCDCMEMCTL
         mov.b   operHB(R5),&0xA29
@@ -166,6 +203,12 @@ MainOp:
         
         jmp     MainOp 
         
+;Objetivo: Volver a la operación principal del programa para seleccionar un operando nuevo guardando la 
+;información del operador seleccionado
+;Precondiciones: R5 representa el índice de la lista operHB y operLB, R14 apunta a los elementos de las mismas listas
+;Postcondiciones: R15 contendrá un número dentro del rango inclusivo de 0 al 3
+;Autor: Christopher Castillo
+;Fecha: 03/10/2021     
 resetOp:
         mov.b   R5,R15                 ; Save index of operation chosen 
         mov.b   #0,R5
@@ -177,9 +220,13 @@ resetOp:
         mov.w   #0,R11                 ; Set space for second to 0
         inc     R13
         jmp     Mainloop
-        
+      
+;Objetivo: Cambia el operador que está siendo mostrado en el display
+;Precondiciones: Un operador está siendo mostrado en el display
+;Postcondiciones: Un operador distinto al anterior se está mostrando en el display
+;Autor: Christopher Castillo
+;Fecha: 03/10/2021  
 nextOp:
-       
         inc     R5
         mov.b   operHB(R5),&0xA29
         mov.b   operLB(R5),&0xA2A
@@ -187,90 +234,150 @@ nextOp:
         jz      returnOp
         jmp     MainOp
         
+;Objetivo: Implementar el comportamiento cíclico de la selcción de operadores
+;Precondiciones: R5 tiene un valor de 4
+;Postcondiciones: R5 tiene un valor de 0
+;Autor: Christopher Castillo
+;Fecha: 03/10/2021  
 returnOp:
         mov.b   #0,R5
         jmp     MainOp
-        mov.b   operHB(R5),&0xA29
+        mov.b   operHB(R5),&0xA29            ;Entiendo que esto no se ejecuta
         mov.b   operLB(R5),&0xA2A
-        
-waitingOp:
-        dec.w    R7
-        cmp.w   #0,R7    
-        jnz     waitingOp
-        mov.b   &P1IN,R4
-        ret
-
+    
+;Objetivo: Implementar un delay en la operación principal para que el procesador no interprete como
+;si los botones hayan sido oprimidos múltiples veces cuando solo fue una.
+;Precondiciones: R7 tiene un valor de 0xFFFF
+;Postcondiciones: R7 tendrá un valor de 0
+;Autor: Hermes Colon
+;Fecha: 02/28/2021     
 waitingTime:
         dec.w    R7
         cmp.w   #0,R7    
         jnz     waitingTime
         mov.b   &P1IN,R4
         ret
-        
-; Switch statement to call operation subroutine based on the operand picked
+    
+;Objetivo: Determinar que subrutina de operaciones llamar basado en el operando elegido por el usuario
+;Precondiciones: R15 contiene el valor indicando que operando fue escogido, (0,suma), (1,resta), (2,multiplicación), (3,división)
+;Postcondiciones: Basado en las  combinaciones, la subrutina de operacion correcta será llamada
+;Autor: María Cordero
+;Fecha: 03/12/2021  
 switchStatement:
-        CMP     #0,R15
+        CMP     #0,R15		        ; If user picked +
         JEQ     addition
-        CMP     #1,R15
+        CMP     #1,R15		        ; If user picked -
         JEQ     subtract
         CMP     #2,R15
-        JEQ     multSetUp
+        JEQ     multSetUp		; If user picked *
         CMP     #3,R15
-        JEQ     divide        
+        JEQ     divide        		; If user picked /
         
-        
+;Objetivo: Sumar operandos escogidos, guardar el resultado en R7
+;Precondiciones: R10 contiene el primer operando, R11 contiene segundo operando
+;Postcondiciones: R7 contiene el resultado de la suma
+;Autor: María Cordero
+;Fecha: 03/12/2021  
 addition:
         ADD     R10,R7
         ADD     R11,R7
         JMP     pushAndCallDisplay
-        
+
+;Objetivo: Determinar si la resta de los operando resulta en un número negativo
+;Precondiciones: R10 contiene el primer operando, R11 contiene segundo operando
+;Postcondiciones: Llamar la subrutina correspondiente para calcular número resultante
+;Autor: María Cordero
+;Fecha:  03/13/2021      
 subtract:
         CMP     R11,R10
         JL      negativeNum
         JGE     positiveNum
 
+;Objetivo: Sustraer operando 2 (R11) de operando 1 (R10) y guardar resultado en R7
+;Precondiciones: R10 contiene el primer operando, R11 contiene segundo operando | R10>R11
+;Postcondiciones: R7 contiene el resultado de la resta
+;Autor: María Cordero
+;Fecha:  03/13/2021  
 positiveNum:
         SUB     R11,R10
         MOV.W   R10,R7
         JMP     pushAndCallDisplay
 
+;Objetivo: Sustraer operando 1 (R11) de operando 2 (R10) y guardar resultado en R7, prender flag de número negativo  en R6 
+;Precondiciones: R10 contiene el primer operando, R11 contiene segundo operando | R11>R10
+;Postcondiciones: R7 contiene el resultado de la resta inversa, R6 = 4 indica que el resultado es negativo
+;Autor: María Cordero
+;Fecha:  03/15/2021  
 negativeNum:
         MOV.B   #0x04,R6                ;Use as flag, if on, there's a negative num
-        SUB     R10,R11
+        SUB     R10,R11	                ;Subtract smaller operand from larger
         MOV.W   R11,R7
         JMP     pushAndCallDisplay
         
-        
+;Objetivo: Determinar si el flag de negativo tiene el valor 4, llamar subrutina adecuada
+;Precondiciones: R6 se utiliza como flag, si R6=4 el, resultado es negativo
+;Postcondiciones: Llamar subrutina para prender signo negativo si R6=4, si no, esperar a que usuario unda un botón 
+;Autor: María Cordero
+;Fecha: 03/15/2021  
 checkNegativeFlag:
         CMP     #0x04,R6
         JEQ     turnOnNegative
         JN      pressToRepeatLoop
- 
+
+;Objetivo: Dibujar en el LCD el símbolo de negativo
+;Precondiciones: R6=0x04
+;Postcondiciones: Símbolo negativo prende, llama subrutina para esperar a que usuario unda un botón
+;Autor: María Cordero
+;Fecha: 03/15/2021 
 turnOnNegative:
         MOV.B   #0x04,&0xA2A            ; Negative sign
         JMP     pressToRepeatLoop 
         
+;Objetivo: Preparar los registros para que se pueda realizar la multiplicación
+;Precondiciones: Los registros R10 y R11 contienen los operandos
+;Postcondiciones: Los registros R7 y R8 tendrán un valor de 0
+;Autor: Christopher Castillo
+;Fecha: 03/10/2021
 multSetUp:
-        MOV.W   #0,R7          
-        MOV.W   #0,R8       
-        CMP.W   R10,R11                 ;Check to see which number is bigger
-        JN      multFirstBigger         ;If R5 is bigger, add it R6 times
+        MOV.W   #0,R7                    
+        MOV.W   #0,R8                    
+        CMP.W   R10,R11                  ;Check to see which number is bigger
+        JN      multFirstBigger          ;If R5 is bigger, add it R6 times
         JMP     multSecondBigger         ;Otherwise, add R6 R5 times
    
+;Objetivo: Sumarle continuamente el número más grande al registro que guarda el resultado de
+;la multiplicación
+;Precondiciones: Los registros R7 y R8 tendrán un valor de 0
+;Postcondiciones: El resultado de la multiplicación se guardará en el conjunto de registros
+;R7 y R8
+;Autor: Christopher Castillo
+;Fecha: 03/10/2021
 multFirstBigger:
-        CMP     #0,R10                 ;Check to see if you've added the necessary amount of times
+        CMP     #0,R10                  ;Check to see if you've added the necessary amount of times
         JEQ     displayBothRegs                     
         DEC     R10                             
-        ADD     R11,R8                 ;If not Add R8 again
-        CMP     #1000,R8
-        JGE     multFirstLeft
-        JL      multFirstBigger
-        
+        ADD     R11,R8                  ;If not Add to R8 again
+        CMP     #1000,R8	        ;If it reaches 1000, jump to multFirstLeft
+        JGE     multFirstLeft           ;Second Register has to be used
+        JL      multFirstBigger		
+
+;Objetivo: Calcular números mayor de 1000 dentro del resultado, guardarlo en R7  
+;Precondiciones: R7 contiene la mitad izquierda del resultado
+;Postcondiciones: R8 contiene mitad derecha del resultado, R7 tiene nuevo total
+;Autor: María Cordero, Hermes Colon (Pair Programming)
+;Fecha: 03/15/2021        
 multFirstLeft:
         INC     R7
         SUB     #1000,R8     
         JMP     multFirstBigger
-               
+      
+;Objetivo: Sumarle continuamente el número más grande al registro que guarda el resultado de
+;la multiplicación
+;Precondiciones: Los registros R7 y R8 tendrán un valor de 0
+;Postcondiciones: El resultado de la multiplicación se guardará en el conjunto de registros
+;R7 y R8
+;Autor: Christopher Castillo
+;Fecha: 03/10/2021
 multSecondBigger:
         CMP     #0,R11
         JEQ     displayBothRegs      
@@ -279,14 +386,25 @@ multSecondBigger:
         CMP     #1000,R8
         JGE     multSecondLeft
         JL      multSecondBigger
-        
+
+
+;Objetivo: Calcular números mayor de 1000 dentro del resultado, guardarlo en R7  
+;Precondiciones: R7 contiene la mitad izquierda del resultado
+;Postcondiciones: R8 contiene mitad derecha del resultado, R7 tiene nuevo total
+;Autor: María Cordero, Hermes Colon (Pair Programming)
+;Fecha: 03/15/2021
 multSecondLeft:
         INC     R7
         SUB     #1000,R8     
         JMP     multSecondBigger  
 
+;Objetivo: Mostrarle al usuario que intentó realizar una operación que no es posible
+;Precondiciones: El número 0 fue seleccionado como el denominador en una disvisón
+;Postcondiciones: Se mostrará en el display la palabra "ERROR"
+;Autor: Christopher Castillo
+;Fecha: 03/13/2021
 error:
-       MOV.W   #2,&LCDCMEMCTL
+       MOV.W    #2,&LCDCMEMCTL
        MOV.B    #0x9F, &0xA29
        MOV.B    #0xCF, &0xA25
        MOV.B    #0xCF, &0xA23
@@ -296,94 +414,137 @@ error:
        MOV.B    #0x02, &0xA2F
        MOV.B    #0xFC, &0xA32
        JMP      pressToRepeatLoop
-         
+
+;Objetivo: Restarle continuamente el denominador al numerador para determinar cunatas veces cabe en el mismo
+;Precondiciones: Los registros R7 y R8 tendrán un valor de 0
+;Postcondiciones: El resultado de la divisón se guardará en el registro R7
+;Autor: Christopher Castillo
+;Fecha: 03/10/2021
 divide:
-        CMP.W   #0,R11
-        JEQ     error
+        CMP.W   #0,R11                  ;Check to see if denominator is 0
+        JEQ     error                   ;Display error message if so
         MOV.W   #0,R7                   ;Result
         MOV.W   #0,R8                   ;Remainder
 
+;Objetivo: Restarle continuamente el denominador al numerador para determinar cunatas veces cabe en el mismo
+;Precondiciones: Los registros R7 y R8 tendrán un valor de 0
+;Postcondiciones: El resultado de la divisón se guardará en el registro R7
+;Autor: Christopher Castillo
+;Fecha: 03/10/2021
 divideLoop:
         MOV.W   R10,R8
         SUB.W   R11,R10                 ;Subtract denominator from numerator
-        JN      pushAndCallDisplay                  ;If it's negative, end the division operation
-        ;JZ      return
+        JN      pushAndCallDisplay      ;If it's negative, end the division operation
         INC     R7                      ;Increase result
         JMP     divideLoop              ;Loop again
 
+;Objetivo: Determinar cuántos registros son utilizado para guardar el resultado
+;Precondiciones: R7 contiene números millares del resultado, si  es 0, el resultado menor que 999
+;Postcondiciones: Llamar a  la  subrutina correspondiente
+;Autor: María Cordero
+;Fecha: 03/15/2021
 displayBothRegs:  
         CMP     #0,R7
         JEQ     loadOne            
         JNE     loadBoth
 
+;Objetivo: Mover productos centenarios o menor a R7 para mostrarlos en la pantalla
+;Precondiciones: R8 contiene valores centenarios o menor del resultado
+;Postcondiciones: R7 contiene resultado
+;Autor: María Cordero
+;Fecha: 03/15/2021
 loadOne:
         MOV     R8,R7
         JMP     pushAndCallDisplay
-        
+ 
+;Objetivo: Identificar que dos registros tienen que ser mostrados en el LCD, enviar centenas o menor a R7
+;Precondiciones: R6 es un flag, R7 contiene millares del resultado, R8 contiene centenas del resultado
+;Postcondiciones: R6 "prende", R14 contiene los millares del resultado, R7 contiene las centenas del resultado
+;Autor: María Cordero
+;Fecha:  03/15/2021    
 loadBoth:
-        MOV.W   #1,R6                   ;Flag turns on if there's a second register to load
-        MOV.W   R7,R14
-        MOV.W   R8,R7
+        MOV.W   #1,R6                   ; Flag turns on if there's a second register to load
+        MOV.W   R7,R14	                ; Use R14 to  load hold R7 value temporarily
+        MOV.W   R8,R7	                ; Because R7 is always used to calculate result, move R8->R7
         JMP     pushAndCallDisplay
 
+;Objetivo: Determinar cuántos ceros a la izquierda, si es que hay alguno, se necesitan 
+;para los centenares del resultado antes de añadir los millares
+;Precondiciones: R14 contiene millares del resultado, R6 indica que resultados encuentra en 2 registros
+;Postcondiciones: R7 contiene millares, todos los ceros significativos entraron al stack
+;Autor: María Cordero, Christopher Castillo, Hermes Colón  (Pair Programming)
+;Fecha: 03/15/2021
 pushSecond:
         MOV.W   R14,R7
         MOV.w   #0,R6                   ;Turn off flag
-        CMP     #100,R8
+        CMP     #100,R8	     
         JGE     displayResult
         CMP     #10,R8
         JGE     pushCeroOnce              
         push.w  #0
         push.w  #0
         JMP     displayResult
-        
+ 
+; This is an extension of the previous subroutine 
 pushCeroOnce:
         push.w  #0
         JMP     displayResult
-
+     
+;Objetivo:Las proximas subrutinas se utilizaron para usar el stack con los remainders del 
+;resultados poder determinar los dígitos individualmente y presentarlos en la pantalla.
+;Precondiciones:Utiliza R7 que  contiene resultado
+;Postcondiciones:Stack con dígitos por separado del resultado
+;Autor: Hermes Colón
+;Fecha: 03/14/2021 
 pushAndCallDisplay:
         MOV.W   #2,&LCDCMEMCTL
-        PUSH.W  #0x00CD        
-        JMP displayResult
-        
-checkIfNegative:
-        CMP     #0,R7
-        MOV.B   #0x04,&0xA2A            ; Negative sign
-        
+        PUSH.W  #0x00CD                    ;Push inicial para saber fin de mostrarD       
+        JMP     displayResult
+  
+; This is an extension of the previous subroutine         
 displayResult:
-        MOV.W   #0,R12                   ;Result
-        MOV.W   #0,R13                   ;Remainder
+        MOV.W   #0,R12                    ;Result
+        MOV.W   #0,R13                    ;Remainder
         mov.w   #0,R15
-        
+; This is an extension of the previous subroutine        
 displayDivide:
         MOV.W   R7,R13
         SUB.W   #10,R7                    ;Subtract denominator from numerator
         JN      nextRemainder             ;If it's negative, end the division operation
         INC     R12                       ;Increase result
         JMP     displayDivide             ;Loop again
-
+; This is an extension of the previous subroutine 
 nextRemainder:
         mov     R12,R7
-        push.w  R13
+        push.w  R13                       ;Remainder se le hace push en stack
         cmp     #0,R12
         jnz     displayResult
         mov.b   #0,R4
-        mov.w   #Final,R4
+        mov.w   #Final,R4                ;Contiene todas las localizaciones del display
         jz      checkFlag
         
-        
+;Objetivo: Determinar si hay un segundo registro donde parte del resultado está guardado
+;Precondiciones: R6 indica que el resultado se  guarda en dos registros (R7,R8)
+;Postcondiciones: Llamar a la subrutina correcta basada en cuantos registros se están utilizando
+;Autor: María Cordero
+;Fecha: 3/15/2021
 checkFlag:
         CMP     #1,R6
         JEQ     pushSecond
         JNE     mostrarD
-   
+
+;Objetivo: Se utiliza el stack para presentar en pantalla el resultado al encontrar CDCD daba por terminado el programa
+;Precondiciones: Stack con dígitos por separado del resultado
+;Postcondiciones: Enseñaba el resultado en la pantalla
+;Autor: Hermes Colón
+;Fecha: 03/13/2021     
 mostrarD:
         mov.w   @R4,R13
-        Pop.w   R5     
-        cmp.b   #0x00CD,R5
+        Pop.w   R5                      ;Dígitos saliendo del stack     
+        cmp.b   #0x00CD,R5              ;Al encontrar este valor en el stack se  termina el programa
         JEQ     checkNegativeFlag
-        ;JZ      return
-        mov.b   digitH(R5),0(R13)
+        
+        mov.b   digitH(R5),0(R13)       ;Se muestran en el display los dígito de manera secuencial
         mov.b   digitL(R5),1(R13)
         incd.w  R4
         jmp     mostrarD    
@@ -391,12 +552,15 @@ mostrarD:
 return:
         RET
         
-;Repeats until the user presses any of the two buttons used throughout the progam again.
-;When the user does so, it jumps to the next Subroutine that clears the display and 
-;restarts the program.
+;Objetivo: Mantenerse en un loop infinito hasta quye el usuario decida reiniciar el programa presionando 
+;cualquiera de los dos botones inferiores al display.
+;Precondiciones: El resultado se calculó correctamente y está representado en el diplay
+;Postcondiciones: El resultado de la operación sigue siendo mostrado en el display
+;Autor: Christopher Castillo
+;Fecha: 03/14/2021
 pressToRepeatLoop:
         MOV.W    #0x0FFFF,R6
-        call    #waitingTime
+        call     #waitingTime
     
         mov.b   &P1IN,R4
         
@@ -409,13 +573,9 @@ pressToRepeatLoop:
         cmp.b   #00000010B,R4
         jeq     init
         JMP     pressToRepeatLoop
-        
-;Clears numbers in the display and goes back to the beginning of the program
-pressToRepeat:
-              MOV.W     #2,&LCDCMEMCTL
-              JMP       init
-       
+   
 overSubroutine:
         JMP $                           ; jump to current location '$'
         NOP                             ; (endless loop)
         END
+
